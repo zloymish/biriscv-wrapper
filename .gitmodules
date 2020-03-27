@@ -1,0 +1,3 @@
+[submodule "src/main/resources/vsrc/biriscv"]
+	path = src/main/resources/vsrc/biriscv
+	url = https://github.com/ultraembedded/biriscv.git
