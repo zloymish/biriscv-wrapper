@@ -47,12 +47,10 @@ class BiRISCVCoreBlackbox(
   extraDecodeStage : Boolean = false,
   memCacheAddrMin : Int = 0x80000000,
   memCacheAddrMax : Int = 0x8fffffff,
-  numBTBEntriesBits : Int = 5,
-  numBHTEntriesBits : Int = 9,
-  rasEnable : Boolean = true,
+  numBTBEntriesWidth : Int = 5,
+  numBHTEntriesWidth : Int = 9,
   gShareEnable : Boolean = false,
-  bhtEnable : Boolean = true,
-  numRASEntriesBits : Int = 3)
+  numRASEntriesWidth : Int = 3)
   extends BlackBox(
     Map(
       "CORE_ID" -> IntParam(coreID),
@@ -69,82 +67,83 @@ class BiRISCVCoreBlackbox(
       "EXTRA_DECODE_STAGE" -> IntParam(extraDecodeStage),
       "MEM_CACHE_ADDR_MIN" -> IntParam(memCacheAddrMin),
       "MEM_CACHE_ADDR_MAX" -> IntParam(memCacheAddrMax),
-      "NUM_BTB_ENTRIES" -> IntParam(2 << numBTBEntriesBits),
-      "NUM_BTB_ENTRIES_W" -> IntParam(numBTBEntriesBits),
-      "NUM_BHT_ENTRIES" -> IntParam(2 << numBHTEntriesBits),
-      "NUM_BHT_ENTRIES_W" -> IntParam(numBHTEntriesBits),
-      "RAS_ENABLE" -> IntParam(rasEnable),
+      "NUM_BTB_ENTRIES" -> IntParam(2 << numBTBEntriesWidth),
+      "NUM_BTB_ENTRIES_W" -> IntParam(numBTBEntriesWidth),
+      "NUM_BHT_ENTRIES" -> IntParam(2 << numBHTEntriesWidth),
+      "NUM_BHT_ENTRIES_W" -> IntParam(numBHTEntriesWidth),
+      "RAS_ENABLE" -> IntParam(numRASEntriesWidth != 0),
       "GSHARE_ENABLE" -> IntParam(gShareEnable),
-      "BHT_ENABLE" -> IntParam(bhtEnable),
-      "NUM_RAS_ENTRIES" -> IntParam(2 << numRASEntriesBits),
-      "NUM_RAS_ENTRIES_W" -> IntParam(numRASEntriesBits)
+      "BHT_ENABLE" -> IntParam(numBHTEntriesWidth != 0),
+      "NUM_RAS_ENTRIES" -> IntParam(2 << numRASEntriesWidth),
+      "NUM_RAS_ENTRIES_W" -> IntParam(numRASEntriesWidth)
     )
   )
   with HasBlackBoxResource
 {
   val io = IO(new Bundle {
+    // Inputs
     val clk_i = Input(Clock())
-    val rst_ni = Input(Bool())
+    val rst_i = Input(Bool()),
+    val axi_i_awready_i = Input(Bool()),
+    val axi_i_wready_i = Input(Bool()),
+    val axi_i_bvalid_i = Input(Bool()),
+    val axi_i_bresp_i = Input(UInt(2.W)),
+    val axi_i_bid_i = Input(UInt(4.W)),
+    val axi_i_arready_i = Input(Bool()),
+    val axi_i_rvalid_i = Input(Bool()),
+    val axi_i_rdata_i = Input(UInt(32.W)),
+    val axi_i_rresp_i = Input(UInt(2.W))
+    val axi_i_rid_i = Input(UInt(4.W))
+    val axi_i_rlast_i = Input(Bool()),
+    val axi_d_awready_i = Input(Bool()),
+    val axi_d_wready_i = Input(Bool()),
+    val axi_d_bvalid_i = Input(Bool()),
+    val axi_d_bresp_i = Input(UInt(2.W)),
+    val axi_d_bid_i = Input(UInt(4.W)),
+    val axi_d_arready_i = Input(Bool()),
+    val axi_d_rvalid_i = Input(Bool()),
+    val axi_d_rdata_i = Input(UInt(32.W)),
+    val axi_d_rresp_i = Input(UInt(2.W)),
+    val axi_d_rid_i = Input(UInt(4.W)),
+    val axi_d_rlast_i = Input(Bool()),
+    val intr_i = Input(Bool()),
+    val reset_vector_i = Input(UInt(32.W)),
 
-    val axi_resp_i_aw_ready      = Input(Bool())
-    val axi_req_o_aw_valid       = Output(Bool())
-    val axi_req_o_aw_bits_id     = Output(UInt(axiIdWidth.W))
-    val axi_req_o_aw_bits_addr   = Output(UInt(axiAddrWidth.W))
-    val axi_req_o_aw_bits_len    = Output(UInt(8.W))
-    val axi_req_o_aw_bits_size   = Output(UInt(3.W))
-    val axi_req_o_aw_bits_burst  = Output(UInt(2.W))
-    val axi_req_o_aw_bits_lock   = Output(Bool())
-    val axi_req_o_aw_bits_cache  = Output(UInt(4.W))
-    val axi_req_o_aw_bits_prot   = Output(UInt(3.W))
-    val axi_req_o_aw_bits_qos    = Output(UInt(4.W))
-    val axi_req_o_aw_bits_region = Output(UInt(4.W))
-    val axi_req_o_aw_bits_atop   = Output(UInt(6.W))
-    val axi_req_o_aw_bits_user   = Output(UInt(axiUserWidth.W))
-
-    val axi_resp_i_w_ready    = Input(Bool())
-    val axi_req_o_w_valid     = Output(Bool())
-    val axi_req_o_w_bits_data = Output(UInt(axiDataWidth.W))
-    val axi_req_o_w_bits_strb = Output(UInt((axiDataWidth/8).W))
-    val axi_req_o_w_bits_last = Output(Bool())
-    val axi_req_o_w_bits_user = Output(UInt(axiUserWidth.W))
-
-    val axi_resp_i_ar_ready      = Input(Bool())
-    val axi_req_o_ar_valid       = Output(Bool())
-    val axi_req_o_ar_bits_id     = Output(UInt(axiIdWidth.W))
-    val axi_req_o_ar_bits_addr   = Output(UInt(axiAddrWidth.W))
-    val axi_req_o_ar_bits_len    = Output(UInt(8.W))
-    val axi_req_o_ar_bits_size   = Output(UInt(3.W))
-    val axi_req_o_ar_bits_burst  = Output(UInt(2.W))
-    val axi_req_o_ar_bits_lock   = Output(Bool())
-    val axi_req_o_ar_bits_cache  = Output(UInt(4.W))
-    val axi_req_o_ar_bits_prot   = Output(UInt(3.W))
-    val axi_req_o_ar_bits_qos    = Output(UInt(4.W))
-    val axi_req_o_ar_bits_region = Output(UInt(4.W))
-    val axi_req_o_ar_bits_user   = Output(UInt(axiUserWidth.W))
-
-    val axi_req_o_b_ready      = Output(Bool())
-    val axi_resp_i_b_valid     = Input(Bool())
-    val axi_resp_i_b_bits_id   = Input(UInt(axiIdWidth.W))
-    val axi_resp_i_b_bits_resp = Input(UInt(2.W))
-    val axi_resp_i_b_bits_user = Input(UInt(axiUserWidth.W))
-
-    val axi_req_o_r_ready      = Output(Bool())
-    val axi_resp_i_r_valid     = Input(Bool())
-    val axi_resp_i_r_bits_id   = Input(UInt(axiIdWidth.W))
-    val axi_resp_i_r_bits_data = Input(UInt(axiDataWidth.W))
-    val axi_resp_i_r_bits_resp = Input(UInt(2.W))
-    val axi_resp_i_r_bits_last = Input(Bool())
-    val axi_resp_i_r_bits_user = Input(UInt(axiUserWidth.W))
+    // Outputs
+    val axi_i_awvalid_o = Output(Bool()),
+    val axi_i_awaddr_o = Output(UInt(32.W)),
+    val axi_i_awid_o = Output(UInt(4.W)),
+    val axi_i_awlen_o = Output(UInt(8.W)),
+    val axi_i_awburst_o = Output(UInt(2.W)),
+    val axi_i_wvalid_o = Output(Bool()),
+    val axi_i_wdata_o = Output(UInt(32.W)),
+    val axi_i_wstrb_o = Output(UInt(4.W)),
+    val axi_i_wlast_o = Output(Bool()),
+    val axi_i_bready_o = Output(Bool()),
+    val axi_i_arvalid_o = Output(Bool()),
+    val axi_i_araddr_o = Output(UInt(32.W)),
+    val axi_i_arid_o = Output(UInt(4.W)),
+    val axi_i_arlen_o = Output(UInt(8.W)),
+    val axi_i_arburst_o = Output(UInt(2.W)),
+    val axi_i_rready_o = Output(Bool()),
+    val axi_d_awvalid_o = Output(Bool()),
+    val axi_d_awaddr_o = Output(UInt(32.W)),
+    val axi_d_awid_o = Output(UInt(4.W)),
+    val axi_d_awlen_o = Output(UInt(8.W)),
+    val axi_d_awburst_o = Output(UInt(2.W)),
+    val axi_d_wvalid_o = Output(Bool()),
+    val axi_d_wdata_o = Output(UInt(32.W)),
+    val axi_d_wstrb_o = Output(UInt(4.W)),
+    val axi_d_wlast_o = Output(Bool()),
+    val axi_d_bready_o = Output(Bool()),
+    val axi_d_arvalid_o = Output(Bool()),
+    val axi_d_araddr_o = Output(UInt(32.W)),
+    val axi_d_arid_o = Output(UInt(4.W)),
+    val axi_d_arlen_o = Output(UInt(8.W)),
+    val axi_d_arburst_o = Output(UInt(2.W)),
+    val axi_d_rready_o = Output(Bool())
   })
 
-  require((exeRegCnt <= execRegAvail) && (exeRegBase.length <= execRegAvail) && (exeRegSz.length <= execRegAvail), s"Currently only supports $execRegAvail execution regions")
-  require((cacheRegCnt <= cacheRegAvail) && (cacheRegBase.length <= cacheRegAvail) && (cacheRegSz.length <= cacheRegAvail), s"Currently only supports $cacheRegAvail cacheable regions")
-
-  // pre-process the verilog to remove "includes" and combine into one file
-  val make = "make -C generators/ariane/src/main/resources/vsrc default "
-  val proc = if (traceportEnabled) make + "EXTRA_PREPROC_OPTS=+define+FIRESIM_TRACE" else make
-  require (proc.! == 0, "Failed to run preprocessing step")
-
   // add wrapper/blackbox after it is pre-processed
-  addResource("/vsrc/ArianeCoreBlackbox.preprocessed.sv")
+  addResource("/vsrc/biriscv/src/top/riscv_top.v")
 }
