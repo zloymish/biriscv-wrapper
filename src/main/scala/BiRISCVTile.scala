@@ -175,22 +175,39 @@ class BiRISCVTile(
   val beatBytes = masterPortBeatBytes
   val sourceBits = 1 // equiv. to userBits (i think)
 
-  val memAXI4Node = AXI4MasterNode(
+  val memAXI4NodeD = AXI4MasterNode(
     Seq(AXI4MasterPortParameters(
       masters = Seq(AXI4MasterParameters(
-        name = portName,
+        name = portName + "-d",
         id = IdRange(0, 1 << idBits))))))
 
-  val memoryTap = TLIdentityNode()
+  val memoryTapD = TLIdentityNode()
   (tlMasterXbar.node
-    := memoryTap
+    := memoryTapD
     := TLBuffer()
     := TLFIFOFixer(TLFIFOFixer.all) // fix FIFO ordering
     := TLWidthWidget(beatBytes) // reduce size of TL
     := AXI4ToTL() // convert to TL
     := AXI4UserYanker(Some(2)) // remove user field on AXI interface. need but in reality user intf. not needed
     := AXI4Fragmenter() // deal with multi-beat xacts
-    := memAXI4Node)
+    := memAXI4NodeD)
+
+  val memAXI4NodeI = AXI4MasterNode(
+    Seq(AXI4MasterPortParameters(
+      masters = Seq(AXI4MasterParameters(
+        name = portName + "-i",
+        id = IdRange(0, 1 << idBits))))))
+
+  val memoryTapI = TLIdentityNode()
+  (tlMasterXbar.node
+    := memoryTapI
+    := TLBuffer()
+    := TLFIFOFixer(TLFIFOFixer.all) // fix FIFO ordering
+    := TLWidthWidget(beatBytes) // reduce size of TL
+    := AXI4ToTL() // convert to TL
+    := AXI4UserYanker(Some(2)) // remove user field on AXI interface. need but in reality user intf. not needed
+    := AXI4Fragmenter() // deal with multi-beat xacts
+    := memAXI4NodeI)
 
   def connectBiRISCVInterrupts(debug: Bool, msip: Bool, mtip: Bool, m_s_eip: UInt) {
     val (interrupts, _) = intSinkNode.in(0)
@@ -273,58 +290,90 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
   // }
 
   // connect the axi interface
-  outer.memAXI4Node.out foreach { case (out, edgeOut) =>
-    core.io.axi_i_awready_i    := out.aw.ready
-    out.aw.valid                   := core.io.axi_req_o_aw_valid
-    out.aw.bits.id                 := core.io.axi_req_o_aw_bits_id
-    out.aw.bits.addr               := core.io.axi_req_o_aw_bits_addr
-    out.aw.bits.len                := core.io.axi_req_o_aw_bits_len
-    out.aw.bits.size               := core.io.axi_req_o_aw_bits_size
-    out.aw.bits.burst              := core.io.axi_req_o_aw_bits_burst
-    out.aw.bits.lock               := core.io.axi_req_o_aw_bits_lock
-    out.aw.bits.cache              := core.io.axi_req_o_aw_bits_cache
-    out.aw.bits.prot               := core.io.axi_req_o_aw_bits_prot
-    out.aw.bits.qos                := core.io.axi_req_o_aw_bits_qos
-    // unused signals
-    assert(core.io.axi_req_o_aw_bits_region === 0.U)
-    assert(core.io.axi_req_o_aw_bits_atop === 0.U)
-    assert(core.io.axi_req_o_aw_bits_user === 0.U)
+  outer.memAXI4NodeD.out foreach { case (out, edgeOut) =>
+    core.io.axi_d_awready_i   := out.aw.ready
+    out.aw.valid              := core.io.axi_d_awvalid_o
+    out.aw.bits.id            := core.io.axi_d_awid_o
+    out.aw.bits.addr          := core.io.axi_d_awaddr_o
+    out.aw.bits.len           := core.io.axi_d_awlen_o
+    out.aw.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.aw.bits.burst         := core.io.axi_d_awburst_o
+    out.aw.bits.lock          := 0.U  // Unused by processor - default to Normal access
+    out.aw.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.aw.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
+    out.aw.bits.qos           := 0.U  // Unused by processor
 
-    core.io.axi_resp_i_w_ready     := out.w.ready
-    out.w.valid                    := core.io.axi_req_o_w_valid
-    out.w.bits.data                := core.io.axi_req_o_w_bits_data
-    out.w.bits.strb                := core.io.axi_req_o_w_bits_strb
-    out.w.bits.last                := core.io.axi_req_o_w_bits_last
-    // unused signals
-    assert(core.io.axi_req_o_w_bits_user === 0.U)
+    core.io.axi_d_wready_i    := out.w.ready
+    out.w.valid               := core.io.axi_d_wvalid_o
+    out.w.bits.data           := core.io.axi_d_wdata_o
+    out.w.bits.strb           := core.io.axi_d_wstrb_o
+    out.w.bits.last           := core.io.axi_d_wlast_o
 
-    out.b.ready                    := core.io.axi_req_o_b_ready
-    core.io.axi_resp_i_b_valid     := out.b.valid
-    core.io.axi_resp_i_b_bits_id   := out.b.bits.id
-    core.io.axi_resp_i_b_bits_resp := out.b.bits.resp
-    core.io.axi_resp_i_b_bits_user := 0.U // unused
+    out.b.ready               := core.io.axi_d_bready_o
+    core.io.axi_d_bvalid_i    := out.b.valid
+    core.io.axi_d_bid_i       := out.b.bits.id
+    core.io.axi_d_bresp_i     := out.b.bits.resp
 
-    core.io.axi_resp_i_ar_ready    := out.ar.ready
-    out.ar.valid                   := core.io.axi_req_o_ar_valid
-    out.ar.bits.id                 := core.io.axi_req_o_ar_bits_id
-    out.ar.bits.addr               := core.io.axi_req_o_ar_bits_addr
-    out.ar.bits.len                := core.io.axi_req_o_ar_bits_len
-    out.ar.bits.size               := core.io.axi_req_o_ar_bits_size
-    out.ar.bits.burst              := core.io.axi_req_o_ar_bits_burst
-    out.ar.bits.lock               := core.io.axi_req_o_ar_bits_lock
-    out.ar.bits.cache              := core.io.axi_req_o_ar_bits_cache
-    out.ar.bits.prot               := core.io.axi_req_o_ar_bits_prot
-    out.ar.bits.qos                := core.io.axi_req_o_ar_bits_qos
-    // unused signals
-    assert(core.io.axi_req_o_ar_bits_region === 0.U)
-    assert(core.io.axi_req_o_ar_bits_user === 0.U)
+    core.io.axi_d_arready_i   := out.ar.ready
+    out.ar.valid              := core.io.axi_d_arvalid_o
+    out.ar.bits.id            := core.io.axi_d_arid_o
+    out.ar.bits.addr          := core.io.axi_d_araddr_o
+    out.ar.bits.len           := core.io.axi_d_arlen_o
+    out.ar.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.ar.bits.burst         := core.io.axi_d_arburst_o
+    out.ar.bits.lock          := 0.U  // Unused by processor - default to Normal access
+    out.ar.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.ar.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
+    out.ar.bits.qos           := 0.U  // Unused by processor
 
-    out.r.ready                    := core.io.axi_req_o_r_ready
-    core.io.axi_resp_i_r_valid     := out.r.valid
-    core.io.axi_resp_i_r_bits_id   := out.r.bits.id
-    core.io.axi_resp_i_r_bits_data := out.r.bits.data
-    core.io.axi_resp_i_r_bits_resp := out.r.bits.resp
-    core.io.axi_resp_i_r_bits_last := out.r.bits.last
-    core.io.axi_resp_i_r_bits_user := 0.U // unused
+    out.r.ready               := core.io.axi_d_rready_o
+    core.io.axi_d_rvalid_i    := out.r.valid
+    core.io.axi_d_rid_i       := out.r.bits.id
+    core.io.axi_d_rdata_i     := out.r.bits.data
+    core.io.axi_d_rresp_i     := out.r.bits.resp
+    core.io.axi_d_rlast_i     := out.r.bits.last
+  }
+  outer.memAXI4NodeI.out foreach { case (out, edgeOut) =>
+    core.io.axi_i_awready_i   := out.aw.ready
+    out.aw.valid              := core.io.axi_i_awvalid_o
+    out.aw.bits.id            := core.io.axi_i_awid_o
+    out.aw.bits.addr          := core.io.axi_i_awaddr_o
+    out.aw.bits.len           := core.io.axi_i_awlen_o
+    out.aw.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.aw.bits.burst         := core.io.axi_i_awburst_o
+    out.aw.bits.lock          := 0.U  // Unused by processor - default to Normal access
+    out.aw.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.aw.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
+    out.aw.bits.qos           := 0.U  // Unused by processor
+
+    core.io.axi_i_wready_i    := out.w.ready
+    out.w.valid               := core.io.axi_i_wvalid_o
+    out.w.bits.data           := core.io.axi_i_wdata_o
+    out.w.bits.strb           := core.io.axi_i_wstrb_o
+    out.w.bits.last           := core.io.axi_i_wlast_o
+
+    out.b.ready               := core.io.axi_i_bready_o
+    core.io.axi_i_bvalid_i    := out.b.valid
+    core.io.axi_i_bid_i       := out.b.bits.id
+    core.io.axi_i_bresp_i     := out.b.bits.resp
+
+    core.io.axi_i_arready_i   := out.ar.ready
+    out.ar.valid              := core.io.axi_i_arvalid_o
+    out.ar.bits.id            := core.io.axi_i_arid_o
+    out.ar.bits.addr          := core.io.axi_i_araddr_o
+    out.ar.bits.len           := core.io.axi_i_arlen_o
+    out.ar.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.ar.bits.burst         := core.io.axi_i_arburst_o
+    out.ar.bits.lock          := 0.U  // Unused by processor - default to Normal access
+    out.ar.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.ar.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
+    out.ar.bits.qos           := 0.U  // Unused by processor
+
+    out.r.ready               := core.io.axi_i_rready_o
+    core.io.axi_i_rvalid_i    := out.r.valid
+    core.io.axi_i_rid_i       := out.r.bits.id
+    core.io.axi_i_rdata_i     := out.r.bits.data
+    core.io.axi_i_rresp_i     := out.r.bits.resp
+    core.io.axi_i_rlast_i     := out.r.bits.last
   }
 }
