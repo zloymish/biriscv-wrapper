@@ -339,10 +339,10 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
     out.aw.bits.id            := core.io.axi_i_awid_o
     out.aw.bits.addr          := core.io.axi_i_awaddr_o
     out.aw.bits.len           := core.io.axi_i_awlen_o
-    out.aw.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.aw.bits.size          := 0.U //TODO: implement a shift distance detector in wrapper sv
     out.aw.bits.burst         := core.io.axi_i_awburst_o
     out.aw.bits.lock          := 0.U  // Unused by processor - default to Normal access
-    out.aw.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.aw.bits.cache         := 0.U //TODO: implement it in wrapper sv (only care about the first two)
     out.aw.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
     out.aw.bits.qos           := 0.U  // Unused by processor
 
@@ -362,10 +362,10 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
     out.ar.bits.id            := core.io.axi_i_arid_o
     out.ar.bits.addr          := core.io.axi_i_araddr_o
     out.ar.bits.len           := core.io.axi_i_arlen_o
-    out.ar.bits.size          := //TODO: implement a shift distance detector in wrapper sv
+    out.ar.bits.size          := 0.U //TODO: implement a shift distance detector in wrapper sv
     out.ar.bits.burst         := core.io.axi_i_arburst_o
     out.ar.bits.lock          := 0.U  // Unused by processor - default to Normal access
-    out.ar.bits.cache         := //TODO: implement it in wrapper sv (only care about the first two)
+    out.ar.bits.cache         := 0.U //TODO: implement it in wrapper sv (only care about the first two)
     out.ar.bits.prot          := 0.U  // Unused by processor - default to Unpriviliege, Unsafe, Data access (or implement it in the wrapper sv)
     out.ar.bits.qos           := 0.U  // Unused by processor
 
