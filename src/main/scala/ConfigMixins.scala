@@ -8,12 +8,17 @@ package biriscv
 import chisel3._
 import chisel3.util.{log2Up}
 
-import freechips.rocketchip.config.{Parameters, Config, Field}
-import freechips.rocketchip.subsystem.{SystemBusKey, RocketTilesKey, RocketCrossingParams}
+//import freechips.rocketchip.config.{Parameters, Config, Field}
+//import freechips.rocketchip.subsystem.{SystemBusKey, RocketTilesKey, RocketCrossingParams}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
-import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
+//import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+
+import org.chipsalliance.cde.config.{Parameters, Config, Field}
+import freechips.rocketchip.subsystem.{SystemBusKey, RocketCrossingParams}
+import freechips.rocketchip.prci.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
+//import org.chipsalliance.rocketconfig.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 
 case object BiRISCVCrossingKey extends Field[Seq[RocketCrossingParams]](List(RocketCrossingParams()))
 
@@ -47,7 +52,8 @@ class WithNBiRISCVCores(n: Int) extends Config(
   new WithNormalBiRISCVSys ++
   new Config((site, here, up) => {
     case BiRISCVTilesKey => {
-      List.tabulate(n)(i => BiRISCVTileParams(hartId = i))
+//      List.tabulate(n)(i => BiRISCVTileParams(hartId = i))
+      List.tabulate(n)(i => BiRISCVTileParams(tileId = i))
     }
   })
 )
@@ -57,6 +63,11 @@ class WithNBiRISCVCores(n: Int) extends Config(
  */
 class WithNormalBiRISCVSys extends Config((site, here, up) => {
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
-  case XLen => 64
-  case MaxHartIdBits => log2Up(site(BiRISCVilesKey).size)
+//  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BiRISCVTilesKey).size)
 })
+
+// Для chipyard 1.13.0
+//class WithDefaultHarnessClockInstantiator extends Config((site, here, up) => {
+//  case HarnessClockInstantiatorKey => ClockInstantiator()
+//})

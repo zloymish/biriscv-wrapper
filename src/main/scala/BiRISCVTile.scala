@@ -17,11 +17,11 @@ import chisel3.experimental.{IntParam, StringParam}
 
 import scala.collection.mutable.{ListBuffer}
 
-import freechips.rocketchip.config._
+//import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
+//import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
@@ -29,6 +29,11 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.amba.axi4._
+
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.prci.{ClockCrossingType, ClockSinkParameters}
+//import freechips.rocketchip.diplomacy.logicaltree.{LogicalTreeNode, LogicalModuleTree}
+//import freechips.rocketchip.tile.{RocketLogicalTreeNode, ICacheLogicalTreeNode}
 
 case object BiRISCVTilesKey extends Field[Seq[BiRISCVTileParams]](Nil)
 
@@ -68,12 +73,31 @@ case class BiRISCVCoreParams(
   val decodeWidth: Int = 2 // TODO: Check
   val fetchWidth: Int = 2 // TODO: Check
   val retireWidth: Int = 2
+  
+  // Для chipyard 1.13.0
+  val mcontextWidth = 0
+  val nL2TLBWays = 0
+  val nPTECacheEntries = 0
+  val pgLevels = 3
+  val scontextWidth = 0
+  val traceHasWdata = false
+  val useConditionalZero = false
+  val useHypervisor = false
+  val useNMI = false
+  val useSupervisor = true
+  val useZba = false
+  val useZbb = false
+  val useZbs = false
+  val xLen = 64
 }
 
 // TODO: BTBParams, DCacheParams, ICacheParams are incorrect in DTB... figure out defaults in Ariane and put in DTB
 case class BiRISCVTileParams(
-  name: Option[String] = Some("biriscv_tile"),
-  hartId: Int = 0,
+//  name: Option[String] = Some("biriscv_tile"),
+  baseName: String = "biriscv_tile",
+  uniqueName: String = "biriscv_tile",
+//  hartId: Int = 0,
+  tileId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
   btb: Option[BTBParams] = Some(BTBParams()),
@@ -81,7 +105,10 @@ case class BiRISCVTileParams(
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   icache: Option[ICacheParams] = Some(ICacheParams()),
   boundaryBuffers: Boolean = false,
-  trace: Boolean = false
+  trace: Boolean = false,
+  
+  // Для chipyard 1.13.0
+  val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
   ) extends TileParams
 
 class BiRISCVTile(
@@ -89,7 +116,7 @@ class BiRISCVTile(
   crossing: ClockCrossingType,
   lookup: LookupByHartIdImpl,
   q: Parameters,
-  logicalTreeNode: LogicalTreeNode)
+  logicalTreeNode: Option[Any] = None)
   extends BaseTile(biriscvParams, crossing, lookup, q)
   with SinksExternalInterrupts
   with SourcesExternalNotifications
@@ -98,10 +125,10 @@ class BiRISCVTile(
    * Setup parameters:
    * Private constructor ensures altered LazyModule.p is used implicitly
    */
-  def this(params: BiRISCVTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
+  def this(params: BiRISCVTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: Option[Any])(implicit p: Parameters) =
     this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
-  val intOutwardNode = IntIdentityNode()
+  val intOutwardNode = Some(IntIdentityNode())
   val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
 
@@ -121,23 +148,37 @@ class BiRISCVTile(
   }
 
   ResourceBinding {
-    Resource(cpuDevice, "reg").bind(ResourceAddress(hartId))
+//    Resource(cpuDevice, "reg").bind(ResourceAddress(hartId))
+    Resource(cpuDevice, "reg").bind(ResourceAddress(tileId))
   }
 
-  override def makeMasterBoundaryBuffers(implicit p: Parameters) = {
-    if (!biriscvParams.boundaryBuffers) super.makeMasterBoundaryBuffers
+//  override def makeMasterBoundaryBuffers(implicit p: Parameters) = {
+//    if (!biriscvParams.boundaryBuffers) super.makeMasterBoundaryBuffers()
+//    else TLBuffer(BufferParams.none, BufferParams.flow, BufferParams.none, BufferParams.flow, BufferParams(1))
+//  }
+
+//  override def makeSlaveBoundaryBuffers(implicit p: Parameters) = {
+//    if (!biriscvParams.boundaryBuffers) super.makeSlaveBoundaryBuffers()
+//    else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
+//  }
+
+  override def makeMasterBoundaryBuffers(crossing: ClockCrossingType)(implicit p: Parameters) = {
+    if (!biriscvParams.boundaryBuffers) super.makeMasterBoundaryBuffers(crossing)
     else TLBuffer(BufferParams.none, BufferParams.flow, BufferParams.none, BufferParams.flow, BufferParams(1))
   }
 
-  override def makeSlaveBoundaryBuffers(implicit p: Parameters) = {
-    if (!biriscvParams.boundaryBuffers) super.makeSlaveBoundaryBuffers
+  override def makeSlaveBoundaryBuffers(crossing: ClockCrossingType)(implicit p: Parameters) = {
+    if (!biriscvParams.boundaryBuffers) super.makeSlaveBoundaryBuffers(crossing)
     else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
   }
 
   val fakeRocketParams = RocketTileParams(
     dcache = biriscvParams.dcache,
-    hartId = biriscvParams.hartId,
-    name   = biriscvParams.name,
+//    hartId = biriscvParams.hartId,
+    tileId = biriscvParams.tileId,
+//    name   = biriscvParams.name,
+//    baseName   = biriscvParams.baseName,
+//    uniqueName   = biriscvParams.uniqueName,
     btb    = biriscvParams.btb,
     core = RocketCoreParams(
       bootFreqHz          = biriscvParams.core.bootFreqHz,
@@ -147,7 +188,7 @@ class BiRISCVTile(
       useAtomics          = biriscvParams.core.useAtomics,
       useAtomicsOnlyForIO = biriscvParams.core.useAtomicsOnlyForIO,
       useCompressed       = biriscvParams.core.useCompressed,
-      useSCIE             = biriscvParams.core.useSCIE,
+//      useSCIE             = biriscvParams.core.useSCIE,
       mulDiv              = biriscvParams.core.mulDiv,
       fpu                 = biriscvParams.core.fpu,
       nLocalInterrupts    = biriscvParams.core.nLocalInterrupts,
@@ -162,7 +203,7 @@ class BiRISCVTile(
       mtvecWritable       = biriscvParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
+//  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
 
   override lazy val module = new BiRISCVTileModuleImp(this)
 
@@ -220,7 +261,7 @@ class BiRISCVTile(
 
 class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
   // annotate the parameters
-  Annotated.params(this, outer.biriscvParams)
+//  Annotated.params(this, outer.biriscvParams)
 
   val debugBaseAddr = BigInt(0x0) // CONSTANT: based on default debug module
   val debugSz = BigInt(0x1000) // CONSTANT: based on default debug module
@@ -256,19 +297,32 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
     numBHTEntriesWidth = log2Ceil(outer.biriscvParams.core.bhtEntries),
 
     // Since only one region is available, we would just use the data at index 0.
-    memCacheAddrMin = cacheableRegionBases(0),
-    memCacheAddrMax = cacheableRegionBases(0) + cacheableRegionSzs(0),
+    memCacheAddrMin = cacheableRegionBases(0).toInt,
+    memCacheAddrMax = (cacheableRegionBases(0) + cacheableRegionSzs(0)).toInt,
+//    memCacheAddrMin = cacheableRegionBases(0),
+//    memCacheAddrMax = cacheableRegionBases(0) + cacheableRegionSzs(0),
 
-    coreID = outer.biriscvParams.hartId,
-    icacheAXIID = outer.biriscvParams.hartId,
-    dcacheAXIID = outer.biriscvParams.hartId,
+//    coreID = outer.biriscvParams.hartId,
+//    icacheAXIID = outer.biriscvParams.hartId,
+//    dcacheAXIID = outer.biriscvParams.hartId,
+    coreID = outer.biriscvParams.tileId,
+    icacheAXIID = outer.biriscvParams.tileId,
+    dcacheAXIID = outer.biriscvParams.tileId,
   ))
 
   core.io.clk_i := clock
-  core.io.rst_ni := ~reset.asBool
+//  core.io.rst_ni := ~reset.asBool
+  core.io.rst_i := ~reset.asBool
 
-  outer.connectArianeInterrupts(core.io.debug_req_i, core.io.ipi_i, core.io.time_irq_i, core.io.irq_i)
-
+//  outer.connectArianeInterrupts(core.io.debug_req_i, core.io.ipi_i, core.io.time_irq_i, core.io.irq_i)
+//  outer.connectBiRISCVInterrupts(core.io.debug_req_i, core.io.ipi_i, core.io.time_irq_i, core.io.irq_i)
+  core.io.intr_i := false.B
+  
+//  core.io.trace_o := DontCare
+//  core.io.sbp_debug := DontCare
+//  core.io.hartid := DontCare
+  core.io.axi_i_arready_i := DontCare
+  
   // if (outer.biriscvParams.trace) {
   //   // unpack the trace io from a UInt into Vec(TracedInstructions)
   //   //outer.traceSourceNode.bundle <> core.io.trace_o.asTypeOf(outer.traceSourceNode.bundle)
