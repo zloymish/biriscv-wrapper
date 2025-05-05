@@ -35,8 +35,11 @@ import freechips.rocketchip.amba.axi4._
 import org.chipsalliance.cde.config._
 //import freechips.rocketchip.diplomacy.logicaltree.{LogicalTreeNode, LogicalModuleTree}
 //import freechips.rocketchip.tile.{RocketLogicalTreeNode, ICacheLogicalTreeNode}
+import java.io.File
+import java.nio.file.{Paths, Path}
 
-class BiRISCVCoreBlackbox(
+//class BiRISCVCoreBlackbox(
+class riscv_top(
   coreID : Int = 0,
   icacheAXIID : Int = 0,
   dcacheAXIID : Int = 0,
@@ -85,6 +88,8 @@ class BiRISCVCoreBlackbox(
   )
   with HasBlackBoxResource
 {
+//  setModuleName("riscv_top")
+  
   val io = IO(new Bundle {
     // Inputs
     val clk_i = Input(Clock())
@@ -150,5 +155,61 @@ class BiRISCVCoreBlackbox(
   })
 
   // add wrapper/blackbox after it is pre-processed
+//  addResource("/vsrc/biriscv/src/top/riscv_top.v")
+//  VerilogSourceDirectory("/vsrc/biriscv/src/core")
+//  VerilogSourceDirectory("/vsrc/biriscv/src/dcache")
+//  VerilogSourceDirectory("/vsrc/biriscv/src/icache")
+//  VerilogSourceDirectory("/vsrc/biriscv/src/tcm")
+  
+  val chipyardDir = System.getProperty("user.dir")
+  val biriscvVsrcDir = s"$chipyardDir/generators/biriscv/src/main/resources/vsrc/"
+  val directories = List("core", "dcache", "icache", "tcm")
+  
+  def findVerilogFiles(base: File): Seq[String] = {
+    def recurse(current: File): Seq[File] = {
+      val files = current.listFiles()
+      if (files == null) Seq()
+      else files.flatMap {
+        case dir if dir.isDirectory => recurse(dir)
+        case file if file.getName.endsWith(".v") => Seq(file)
+        case _ => Seq()
+      }
+    }
+
+    recurse(base).map { file =>
+      base.toPath.relativize(file.toPath).toString
+    }
+  }
+  
+  def recurse(current: File): Seq[File] = {
+    val files = current.listFiles()
+    
+    if (files == null) Seq()
+    else files.flatMap {
+      case dir if dir.isDirectory => recurse(dir)
+      case file if file.getName.endsWith(".v") => Seq(file)
+      case _ => Seq()
+    }
+  }
+  
+  directories.foreach { subdir =>
+    val fullPath = new File(biriscvVsrcDir + "biriscv/src/" + subdir)
+    val relPaths = findVerilogFiles(fullPath)
+//    val relPaths = recurse(base).map { file =>
+//      base.toPath.relativize(file.toPath).toString
+//    }
+    
+    relPaths.foreach { rel =>
+      val resourcePath = s"/vsrc/biriscv/src/$subdir/$rel"
+      addResource(resourcePath)
+    }
+  }
+  
+//  addResource("/vsrc/biriscv/src/dcache/dcache.v")
+//  addResource("/vsrc/biriscv/src/top/BiRISCVCoreBlackbox.v")
   addResource("/vsrc/biriscv/src/top/riscv_top.v")
+  
+//  val chipyardDir = System.getProperty("user.dir")
+//  val biriscvVsrcDir = s"$chipyardDir/generators/biriscv/src/main/resources/vsrc"
+//  addPath(s"$biriscvVsrcDir/biriscv/src/top/riscv_top.v")
 }

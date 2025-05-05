@@ -16,7 +16,8 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 
 import org.chipsalliance.cde.config.{Parameters, Config, Field}
-import freechips.rocketchip.subsystem.{SystemBusKey, RocketCrossingParams}
+//import freechips.rocketchip.subsystem.{SystemBusKey, RocketCrossingParams}
+import freechips.rocketchip.subsystem._
 import freechips.rocketchip.prci.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 //import org.chipsalliance.rocketconfig.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 
@@ -48,24 +49,41 @@ class WithToFromHostCaching extends Config((site, here, up) => {
  *
  * @param n amount of tiles to duplicate
  */
-class WithNBiRISCVCores(n: Int) extends Config(
-  new WithNormalBiRISCVSys ++
-  new Config((site, here, up) => {
-    case BiRISCVTilesKey => {
-//      List.tabulate(n)(i => BiRISCVTileParams(hartId = i))
-      List.tabulate(n)(i => BiRISCVTileParams(tileId = i))
-    }
-  })
-)
+//class WithNBiRISCVCores(n: Int) extends Config(
+//  new WithNormalBiRISCVSys ++
+//  new Config((site, here, up) => {
+//    case BiRISCVTilesKey => {
+////      List.tabulate(n)(i => BiRISCVTileParams(hartId = i))
+//      List.tabulate(n)(i => BiRISCVTileParams(tileId = i))
+//    }
+//  })
+//)
+
+// Списано с Ibex
+class WithNBiRISCVCores(n: Int = 1) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => {
+    val prev = up(TilesLocated(InSubsystem), site)
+    val idOffset = up(NumTiles)
+    (0 until n).map { i =>
+      BiRISCVTileAttachParams(
+        tileParams = BiRISCVTileParams(tileId = i + idOffset),
+        crossingParams = RocketCrossingParams()
+      )
+    } ++ prev
+  }
+  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+  case MaxHartIdBits => log2Up(site(BiRISCVTilesKey).size)
+  case NumTiles => up(NumTiles) + n
+})
 
 /**
  * Setup default BiRISCV parameters.
  */
-class WithNormalBiRISCVSys extends Config((site, here, up) => {
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
-//  case XLen => 64
-  case MaxHartIdBits => log2Up(site(BiRISCVTilesKey).size)
-})
+//class WithNormalBiRISCVSys extends Config((site, here, up) => {
+//  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+////  case XLen => 64
+//  case MaxHartIdBits => log2Up(site(BiRISCVTilesKey).size)
+//})
 
 // Для chipyard 1.13.0
 //class WithDefaultHarnessClockInstantiator extends Config((site, here, up) => {

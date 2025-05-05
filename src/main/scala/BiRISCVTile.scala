@@ -91,25 +91,59 @@ case class BiRISCVCoreParams(
   val xLen = 64
 }
 
+// Списано с Ibex
+case class BiRISCVTileAttachParams(
+  tileParams: BiRISCVTileParams,
+  crossingParams: RocketCrossingParams
+) extends CanAttachTile {
+  type TileType = BiRISCVTile
+  val lookup = PriorityMuxHartIdFromSeq(Seq(tileParams))
+}
+
 // TODO: BTBParams, DCacheParams, ICacheParams are incorrect in DTB... figure out defaults in Ariane and put in DTB
-case class BiRISCVTileParams(
+//case class BiRISCVTileParams(
 //  name: Option[String] = Some("biriscv_tile"),
-  baseName: String = "biriscv_tile",
-  uniqueName: String = "biriscv_tile",
-//  hartId: Int = 0,
+//  baseName: String = name.getOrElse("biriscv_tile"),
+//  uniqueName: String = s"${baseName}_$tileId",
+////  hartId: Int = 0,
+//  tileId: Int = 0,
+//  beuAddr: Option[BigInt] = None,
+//  blockerCtrlAddr: Option[BigInt] = None,
+//  btb: Option[BTBParams] = Some(BTBParams()),
+//  core: BiRISCVCoreParams = BiRISCVCoreParams(),
+//  dcache: Option[DCacheParams] = Some(DCacheParams()),
+//  icache: Option[ICacheParams] = Some(ICacheParams()),
+//  boundaryBuffers: Boolean = false,
+//  trace: Boolean = false,
+//  
+//  // Для chipyard 1.13.0
+//  val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
+//  ) 
+//  extends TileParams
+//  extends InstantiableTileParams[BiRISCVTile]
+
+// Списано с Ibex
+case class BiRISCVTileParams(
+  name: Option[String] = Some("biriscv_tile"),
   tileId: Int = 0,
-  beuAddr: Option[BigInt] = None,
-  blockerCtrlAddr: Option[BigInt] = None,
-  btb: Option[BTBParams] = Some(BTBParams()),
-  core: BiRISCVCoreParams = BiRISCVCoreParams(),
-  dcache: Option[DCacheParams] = Some(DCacheParams()),
-  icache: Option[ICacheParams] = Some(ICacheParams()),
-  boundaryBuffers: Boolean = false,
-  trace: Boolean = false,
-  
-  // Для chipyard 1.13.0
+  val core: BiRISCVCoreParams = BiRISCVCoreParams(),
+  trace: Boolean = false
+) extends InstantiableTileParams[BiRISCVTile]
+{
+  val beuAddr: Option[BigInt] = None
+  val blockerCtrlAddr: Option[BigInt] = None
+  val btb: Option[BTBParams] = Some(BTBParams())
+//  val btb: Option[BTBParams] = None
+  val boundaryBuffers: Boolean = false
+  val dcache: Option[DCacheParams] = Some(DCacheParams())
+  val icache: Option[ICacheParams] = Some(ICacheParams())
   val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
-  ) extends TileParams
+  def instantiate(crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters): BiRISCVTile = {
+    new BiRISCVTile(this, crossing, lookup)
+  }
+  val baseName: String = name.getOrElse("biriscv_tile")
+  val uniqueName: String = s"${baseName}_$tileId"
+}
 
 class BiRISCVTile(
   val biriscvParams: BiRISCVTileParams,
@@ -125,10 +159,15 @@ class BiRISCVTile(
    * Setup parameters:
    * Private constructor ensures altered LazyModule.p is used implicitly
    */
-  def this(params: BiRISCVTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: Option[Any])(implicit p: Parameters) =
-    this(params, crossing.crossingType, lookup, p, logicalTreeNode)
-
-  val intOutwardNode = Some(IntIdentityNode())
+//  def this(params: BiRISCVTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: Option[Any])(implicit p: Parameters) =
+//    this(params, crossing.crossingType, lookup, p, logicalTreeNode)
+  
+  // Списано с Ibex
+  def this(params: BiRISCVTileParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
+    this(params, crossing.crossingType, lookup, p)
+  
+//  val intOutwardNode = Some(IntIdentityNode())
+  val intOutwardNode = None
   val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
 
@@ -285,7 +324,8 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
   val traceInstSz = (new freechips.rocketchip.rocket.TracedInstruction).getWidth
 
   // connect the ariane core
-  val core = Module(new BiRISCVCoreBlackbox(
+//  val core = Module(new BiRISCVCoreBlackbox(
+  val core = Module(new riscv_top(
     // traceport params
     // TODO: We don't have tracing support now, implement later
     // traceportEnabled = outer.biriscvParams.trace,
@@ -322,6 +362,7 @@ class BiRISCVTileModuleImp(outer: BiRISCVTile) extends BaseTileModuleImp(outer){
 //  core.io.sbp_debug := DontCare
 //  core.io.hartid := DontCare
   core.io.axi_i_arready_i := DontCare
+  core.io.reset_vector_i := DontCare
   
   // if (outer.biriscvParams.trace) {
   //   // unpack the trace io from a UInt into Vec(TracedInstructions)
